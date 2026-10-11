@@ -1,0 +1,7 @@
+.env
+ticket_data.json
+ticket_stats.json
+.ticket_stats.*.tmp
+__pycache__/
+*.py[cod]
+.venv/
