@@ -3,12 +3,20 @@ setlocal EnableExtensions DisableDelayedExpansion
 cd /d "%~dp0"
 if errorlevel 1 goto folder_error
 
+where py >nul 2>&1
+if errorlevel 1 goto try_python
+set "BOT_PY_CMD=py"
+goto run_bot
+
+:try_python
 where python >nul 2>&1
 if errorlevel 1 goto python_missing
-if not exist "ticket_system_main_v41.py" goto script_missing
+set "BOT_PY_CMD=python"
 
+:run_bot
+if not exist "ticket_system_main_v42.py" goto script_missing
 echo Bot baslatiliyor. Durdurmak icin Ctrl+C kullan.
-python ticket_system_main_v41.py
+%BOT_PY_CMD% ticket_system_main_v42.py
 set "BOT_EXIT=%ERRORLEVEL%"
 if "%BOT_EXIT%"=="0" goto finished
 echo.
@@ -23,11 +31,11 @@ goto failure
 :python_missing
 echo Python bulunamadi. Python kur ve Add Python to PATH secenegini etkinlestir.
 echo https://www.python.org/downloads/windows/
-echo Kurulumdan sonra yeni CMD ac ve python -m pip install -r requirements.txt calistir.
+echo Kurulumdan sonra yeni CMD ac ve py -m pip install -r requirements.txt calistir.
 goto failure
 
 :script_missing
-echo ticket_system_main_v41.py bulunamadi. Python paketini tamamen klasore cikar.
+echo ticket_system_main_v42.py bulunamadi. Python paketini tamamen klasore cikar.
 goto failure
 
 :failure

@@ -1,8 +1,8 @@
-# Baba Discord bilet botu — Python v41
+# Baba Discord bilet botu — Python v42
 
 Bilet sistemine yetkili istatistikleri ve bilet sahibinin DM üzerinden verebildiği puanlar eklendi. Mevcut kurulum, doğrulama, sıfırlama ve bilet yönetimi komutları korunur.
 
-**[Hazır Python paketini indir](https://github.com/swechy06/baba/raw/refs/heads/main/downloads/baba-ticket-python-v41.zip)** · **[Yalnızca Python dosyasını indir](https://github.com/swechy06/baba/raw/refs/heads/main/ticket_system_main_v41.py)**
+**[Hazır Python paketini indir](https://github.com/swechy06/baba/raw/refs/heads/main/downloads/baba-ticket-python-v42.zip)** · **[Yalnızca Python dosyasını indir](https://github.com/swechy06/baba/raw/refs/heads/main/ticket_system_main_v42.py)**
 
 ## Kurulum ve güncelleme
 
@@ -12,17 +12,23 @@ Bilet sistemine yetkili istatistikleri ve bilet sahibinin DM üzerinden verebild
 4. [Python](https://www.python.org/downloads/windows/) kurulu olmalı; Windows kurulumunda **Add Python to PATH** seçeneğini işaretle. Bot klasöründe CMD aç:
 
 ```cmd
-python -m pip install -r requirements.txt
-python ticket_system_main_v41.py
+py -m pip install -r requirements.txt
+py ticket_system_main_v42.py
 ```
 
 Sonraki açılışlarda şu komut yeterlidir:
 
 ```cmd
-python ticket_system_main_v41.py
+py ticket_system_main_v42.py
 ```
 
-İstersen `run_python.cmd` dosyasına çift tıklayabilir veya CMD üzerinden `run_python.cmd` çalıştırabilirsin. Hata halinde pencere açık kalır. Discord Developer Portal'da **Server Members Intent** ve **Message Content Intent** açık olmalı; botun bilet ve log kanallarındaki mevcut izinlerini koru.
+İstersen `run_python.cmd` dosyasına çift tıklayabilir veya CMD üzerinden `run_python.cmd` çalıştırabilirsin. Başlatıcı önce `py`, bulunamazsa `python` kullanır. Hata halinde pencere açık kalır. Discord Developer Portal'da **Server Members Intent** ve **Message Content Intent** açık olmalı; botun bilet ve log kanallarındaki mevcut izinlerini koru.
+
+## Komut görünürlüğü
+
+v42 açılışta komutları hem genel listeye hem de bağlı olduğu sunuculara kaydeder. CMD'de `Python v42 aktif:` ve `Sunucu komutlari kaydedildi [sunucu kimliği]: ... /yetkiliistatistik` satırlarını kontrol et. Yeniden bağlanmada başarıyla kayıt yapılan sunucular tekrar kaydedilmez; yeni bir sunucuya eklenince kayıt otomatik yapılır.
+
+Sunucu kayıt satırı var ama komut görünmüyorsa Discord masaüstü uygulamasında **Ctrl+R** ile yenile. Kayıt sırasında izin hatası varsa botun davetinde `applications.commands` kapsamı ve sunucunun entegrasyon izinlerini kontrol et. İstatistik komutunun yetki kontrolü korunur.
 
 ## İstatistikler ve puanlama
 
@@ -34,12 +40,12 @@ python ticket_system_main_v41.py
 - Ortalama puan yalnızca puan verilmiş biletlerden hesaplanır; puansız biletler sıfır puan sayılmaz.
 - İstatistikler ve puanlar `ticket_stats.json` içinde saklanır; güncellemelerde bu dosyayı silme.
 
-Önceki Java kaynakları ve paketi `java-bot` klasöründe korunur. Bu güncellemenin çalıştırma dosyası `ticket_system_main_v41.py` dosyasıdır.
+Önceki Java kaynakları ve paketi `java-bot` klasöründe korunur. Bu güncellemenin çalıştırma dosyası `ticket_system_main_v42.py` dosyasıdır.
 
 ## Geliştirici doğrulaması
 
 İstatistik testlerini kaynak kod bulunan proje klasöründe çalıştır:
 
 ```cmd
-python -m unittest discover -s python-tests -p "test_stats*.py"
+py -m unittest discover -s python-tests -p "test_stats*.py"
 ```

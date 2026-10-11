@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "ticket_system_main_v41.py"
+MODULE_PATH = Path(__file__).resolve().parents[1] / "ticket_system_main_v42.py"
 
 
 def import_stats():
