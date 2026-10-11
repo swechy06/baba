@@ -1,0 +1,18 @@
+.env
+.env.local
+.env.*.local
+ticket_data.json
+ticket_data.json.*
+target/
+*.log
+hs_err_pid*.log
+replay_pid*.log
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+
+# Local runnable build; distribution archives live under ../downloads.
+*.jar
