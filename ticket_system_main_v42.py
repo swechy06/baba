@@ -646,6 +646,7 @@ class Bot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
         self._command_sync_lock = asyncio.Lock()
         self._synced_command_guilds = set()
+        self._global_commands_cleared = False
 
     async def setup_hook(self):
         # Kalıcı bilet kontrolleri ve DM puanlama butonları yeniden başlatmada da çalışır.
@@ -657,16 +658,31 @@ class Bot(commands.Bot):
                 message_id=int(record["rating_message_id"]),
             )
         try:
-            registered = await self.tree.sync()
+            await self.clear_global_commands()
         except discord.HTTPException:
             logging.getLogger("ticket.commands").exception(
-                "Genel komutlar kaydedilemedi; sunucu komutlari baglantidan sonra denenecek."
+                "Eski genel komutlar temizlenemedi; baglantidan sonra yeniden denenecek."
             )
-        else:
-            print("Genel komutlar kaydedildi: " + ", ".join("/" + cmd.name for cmd in registered))
+
+    async def clear_global_commands(self):
+        # Eski genel kayitlar sunucu kayitlariyla ayni komutu iki kez gostermesin.
+        # Yerel tanimlar sunuculara kopyalamak icin her durumda korunur.
+        async with self._command_sync_lock:
+            if self._global_commands_cleared:
+                return
+            commands = self.tree.get_commands()
+            self.tree.clear_commands(guild=None)
+            try:
+                await self.tree.sync()
+            finally:
+                for command in commands:
+                    self.tree.add_command(command)
+            self._global_commands_cleared = True
+            print("Genel komut listesi temizlendi; komutlar yalnizca sunuculara kaydedilecek.")
 
     async def sync_guild_commands(self, guild):
-        # Genel komutlarin yayilmasini beklemeden sunucuda kullanilabilmesini sagla.
+        # Basarisiz genel temizligi tekrar dene; iki kapsamda kayit birakma.
+        await self.clear_global_commands()
         # Reconnect ve eszamanli ready/join olaylari tekrar tekrar API istegi yapmasin.
         async with self._command_sync_lock:
             if guild.id in self._synced_command_guilds:
@@ -1235,7 +1251,7 @@ async def send_ticket_log(channel, ticket_type, reason, closed_by):
 
     embed.add_field(
         name="📜 Transcript",
-        value="Transcript sistemi bağlanmaya hazır.",
+        value="Transcript panelin yukarısında verilmiştir",
         inline=False
     )
 
@@ -1253,6 +1269,7 @@ async def send_ticket_log(channel, ticket_type, reason, closed_by):
 # Yetkili istatistikleri ayarlardan bağımsız tutulur; sistem sıfırlansa da geçmiş korunur.
 _STATS_LOG = logging.getLogger("ticket.statistics")
 _ticket_operation_locks = defaultdict(asyncio.Lock)
+_ticket_creation_locks = defaultdict(asyncio.Lock)
 _stats_history_recovered = set()
 
 
@@ -1659,9 +1676,72 @@ class CloseTicketView(discord.ui.View):
 
 
 
-async def create_ticket(interaction, ticket_type, reason=None):
+async def find_open_ticket(guild, user):
+    """Find the owner's open ticket across all support types, including old panels."""
+    with _TICKET_STATS_LOCK:
+        records = load_ticket_stats()["guilds"].get(str(guild.id), {}).get("tickets", {})
+    for channel_id, record in records.items():
+        if record["owner_id"] != user.id or record["closed_at"] is not None:
+            continue
+        channel = guild.get_channel(int(channel_id))
+        if channel is None:
+            # A newly created channel may not be in the Gateway cache yet. Only a
+            # confirmed deletion releases an open record; API failures fail closed.
+            try:
+                channel = await guild.fetch_channel(int(channel_id))
+            except discord.NotFound:
+                continue
+        if isinstance(channel, discord.TextChannel):
+            return channel
 
+    # Pre-statistics tickets have no ledger entry. Use the bot's original card
+    # to distinguish the owner from staff and members added to an existing ticket.
+    for channel in guild.text_channels:
+        record = records.get(str(channel.id))
+        if record is not None and (record["closed_at"] is not None or record["owner_id"] is not None):
+            continue
+        if get_ticket_info(channel)[0] not in SUPPORT_LABELS:
+            continue
+        if channel.overwrites_for(user).view_channel is not True:
+            continue
+        panel = await find_ticket_message(channel)
+        if panel is None:
+            raise ValueError("Açık biletin sahibi destek kartından doğrulanamadı.")
+        owner = re.search(r"<@!?(\d+)>", panel.embeds[0].description or "")
+        if owner is None:
+            raise ValueError("Açık biletin sahibinin kimliği destek kartında bulunamadı.")
+        if int(owner.group(1)) == user.id:
+            return channel
+    return None
+
+
+async def create_ticket(interaction, ticket_type, reason=None):
     await interaction.response.defer(ephemeral=True)
+    if interaction.guild is None:
+        await interaction.followup.send("❌ Ticket sadece sunucuda açılabilir.", ephemeral=True)
+        return
+    # Modal submissions can arrive together; checking and creating must be one
+    # operation per owner, regardless of which support button was used.
+    async with _ticket_creation_locks[(interaction.guild.id, interaction.user.id)]:
+        try:
+            existing = await find_open_ticket(interaction.guild, interaction.user)
+            if existing is not None:
+                await interaction.followup.send(
+                    f"❌ Zaten açık bir ticket'ın var: {existing.mention}\n"
+                    "Yeni bir ticket açabilmek için mevcut ticket'ın kapatılmasını beklemelisin.",
+                    ephemeral=True,
+                )
+                return
+            await _create_ticket(interaction, ticket_type, reason)
+        except (OSError, ValueError, RuntimeError, discord.HTTPException):
+            _STATS_LOG.exception("Bilet açma veya açık bilet kontrolü tamamlanamadı")
+            await interaction.followup.send(
+                "❌ Ticket açılamadı veya mevcut biletler doğrulanamadı. "
+                "Botun kanal ve dosya izinlerini kontrol edin.", ephemeral=True,
+            )
+
+
+async def _create_ticket(interaction, ticket_type, reason=None):
 
     guild = interaction.guild
     user = interaction.user

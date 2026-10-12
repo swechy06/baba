@@ -29,6 +29,12 @@ class CommandRegistrationTests(unittest.IsolatedAsyncioTestCase):
             'biletsisteminikur', 'ticketsistemdogrulama',
             'biletsistemisifirla', 'yetkiliistatistik',
         }
+        global_api = mock.patch.object(
+            self.bot.http, 'bulk_upsert_global_commands',
+            mock.AsyncMock(side_effect=self.response),
+        )
+        self.global_api = global_api.start()
+        self.addCleanup(global_api.stop)
 
     @staticmethod
     def response(application_id, guild_id=None, *, payload):
@@ -40,6 +46,36 @@ class CommandRegistrationTests(unittest.IsolatedAsyncioTestCase):
     def error():
         return discord.Forbidden(SimpleNamespace(status=403, reason='Forbidden'),
                                  'Missing applications.commands scope')
+
+    async def test_startup_removes_old_global_duplicates_and_registers_only_guild_commands(self):
+        remote_global = list(self.expected_names)
+        remote_guild = []
+        operations = []
+
+        def global_response(application_id, *, payload):
+            operations.append('clear_global')
+            remote_global[:] = [command['name'] for command in payload]
+            return self.response(application_id, payload=payload)
+
+        def guild_response(application_id, guild_id, *, payload):
+            operations.append('sync_guild')
+            remote_guild[:] = [command['name'] for command in payload]
+            return self.response(application_id, guild_id, payload=payload)
+
+        self.global_api.side_effect = global_response
+        with mock.patch.object(self.bot.http, 'bulk_upsert_guild_commands',
+                               mock.AsyncMock(side_effect=guild_response)), \
+                mock.patch.object(self.bot, 'add_view'), mock.patch('builtins.print'):
+            await self.bot.setup_hook()
+            await self.bot.sync_guild_commands(self.guild)
+            await self.bot.sync_guild_commands(self.guild)
+
+        self.assertEqual(operations, ['clear_global', 'sync_guild'])
+        self.global_api.assert_awaited_once_with(999, payload=[])
+        self.assertEqual(remote_global, [])
+        self.assertEqual(set(remote_guild), self.expected_names)
+        self.assertEqual((remote_global + remote_guild).count('biletsisteminikur'), 1)
+        self.assertEqual({cmd.name for cmd in self.bot.tree.get_commands()}, self.expected_names)
 
     async def test_real_guild_payload_contains_statistics_and_optional_member(self):
         with mock.patch.object(self.bot.http, 'bulk_upsert_guild_commands',
@@ -63,6 +99,26 @@ class CommandRegistrationTests(unittest.IsolatedAsyncioTestCase):
                 mock.patch('builtins.print'):
             await asyncio.gather(*(self.bot.sync_guild_commands(self.guild) for _ in range(3)))
         api.assert_awaited_once()
+        self.global_api.assert_awaited_once_with(999, payload=[])
+
+    async def test_failed_global_cleanup_prevents_duplicate_registration_and_can_retry(self):
+        self.global_api.side_effect = self.error()
+        with mock.patch.object(self.bot.http, 'bulk_upsert_guild_commands',
+                               mock.AsyncMock(side_effect=self.response)) as guild_api:
+            with self.assertRaises(discord.Forbidden):
+                await self.bot.sync_guild_commands(self.guild)
+            guild_api.assert_not_awaited()
+            self.assertFalse(self.bot._global_commands_cleared)
+            self.assertEqual(self.bot._synced_command_guilds, set())
+            self.assertEqual({cmd.name for cmd in self.bot.tree.get_commands()}, self.expected_names)
+
+            self.global_api.side_effect = self.response
+            with mock.patch('builtins.print'):
+                await self.bot.sync_guild_commands(self.guild)
+            guild_api.assert_awaited_once()
+        self.assertTrue(self.bot._global_commands_cleared)
+        self.assertEqual(self.global_api.await_count, 2)
+        self.assertEqual(self.bot._synced_command_guilds, {10})
 
     async def test_failed_registration_can_retry_and_does_not_poison_other_guild(self):
         with mock.patch.object(self.bot.http, 'bulk_upsert_guild_commands',
@@ -117,18 +173,21 @@ class CommandRegistrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any('applications.commands' in message for message in logs.output))
         self.assertNotIn(10, self.bot._synced_command_guilds)
 
-    async def test_global_http_failure_preserves_views_and_allows_guild_registration(self):
+    async def test_global_cleanup_failure_preserves_views_and_retries_before_guild_registration(self):
         with mock.patch.object(self.bot.http, 'bulk_upsert_global_commands',
                                mock.AsyncMock(side_effect=self.error())), \
                 mock.patch.object(self.bot, 'add_view') as views, \
                 self.assertLogs('ticket.commands', level='ERROR'):
             await self.bot.setup_hook()
         self.assertEqual(views.call_count, 2)
+        self.assertFalse(self.bot._global_commands_cleared)
+        self.assertEqual({cmd.name for cmd in self.bot.tree.get_commands()}, self.expected_names)
         with mock.patch.object(self.bot.http, 'bulk_upsert_guild_commands',
                                mock.AsyncMock(side_effect=self.response)) as api, \
                 mock.patch('builtins.print'):
             await self.bot.sync_guild_commands(self.guild)
         api.assert_awaited_once()
+        self.global_api.assert_awaited_once_with(999, payload=[])
         self.assertEqual({cmd['name'] for cmd in api.call_args.kwargs['payload']}, self.expected_names)
 
 

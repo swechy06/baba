@@ -26,9 +26,11 @@ py ticket_system_main_v42.py
 
 ## Komut görünürlüğü
 
-v42 açılışta komutları hem genel listeye hem de bağlı olduğu sunuculara kaydeder. CMD'de `Python v42 aktif:` ve `Sunucu komutlari kaydedildi [sunucu kimliği]: ... /yetkiliistatistik` satırlarını kontrol et. Yeniden bağlanmada başarıyla kayıt yapılan sunucular tekrar kaydedilmez; yeni bir sunucuya eklenince kayıt otomatik yapılır.
+v42 açılışta eski genel komut kayıtlarını temizler ve komutları yalnızca bağlı olduğu sunuculara kaydeder; böylece aynı slash komutu iki kez görünmez. CMD'de `Python v42 aktif:` ve `Sunucu komutlari kaydedildi [sunucu kimliği]: ... /yetkiliistatistik` satırlarını kontrol et. Yeniden bağlanmada başarıyla kayıt yapılan sunucular tekrar kaydedilmez; yeni bir sunucuya eklenince kayıt otomatik yapılır.
 
 Sunucu kayıt satırı var ama komut görünmüyorsa Discord masaüstü uygulamasında **Ctrl+R** ile yenile. Kayıt sırasında izin hatası varsa botun davetinde `applications.commands` kapsamı ve sunucunun entegrasyon izinlerini kontrol et. İstatistik komutunun yetki kontrolü korunur.
+
+Bir kullanıcı aynı sunucuda yalnızca bir açık ticket sahibi olabilir; bu sınır bütün destek türleri için geçerlidir. Mevcut ticket kapatılmadan yeni ticket açma isteği reddedilir ve açık kanal gösterilir. Aynı anda gönderilen istekler ve botun yeniden başlatılması sınırı aşmaz. **Çözüldü** durumuna almak bileti kapatmaz; yeni bilet için **Bileti Kapat** işlemi tamamlanmalıdır.
 
 ## İstatistikler ve puanlama
 
